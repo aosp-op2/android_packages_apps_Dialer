@@ -23,6 +23,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.database.Cursor;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Trace;
@@ -64,6 +65,7 @@ import com.android.dialer.voicemail.VoicemailPlaybackPresenter;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Adapter class to fill in data for the Call Log.
@@ -107,6 +109,7 @@ public class CallLogAdapter extends GroupingListAdapter
     private final Map<String, Boolean> mBlockedNumberCache = new ArrayMap<>();
 
     protected ContactInfoCache mContactInfoCache;
+    private String mFilterString;
 
     private final int mActivityType;
 
@@ -355,6 +358,12 @@ public class CallLogAdapter extends GroupingListAdapter
         mContactInfoCache.invalidate();
     }
 
+    public void startCache() {
+        if (PermissionsUtil.hasPermission(mContext, android.Manifest.permission.READ_CONTACTS)) {
+            mContactInfoCache.start();
+        }
+    }
+
     public void onResume() {
         if (PermissionsUtil.hasPermission(mContext, android.Manifest.permission.READ_CONTACTS)) {
             mContactInfoCache.start();
@@ -489,7 +498,10 @@ public class CallLogAdapter extends GroupingListAdapter
 
         int count = getGroupSize(position);
 
-        final String number = c.getString(CallLogQuery.NUMBER);
+        final String phoneNumber = c.getString(CallLogQuery.NUMBER);
+        Pattern pattern = Pattern.compile("[,;]");
+        String[] num = pattern.split(phoneNumber);
+        final String number = num.length > 0 ? num[0] : "";
         final String countryIso = c.getString(CallLogQuery.COUNTRY_ISO);
         final String postDialDigits = CompatUtils.isNCompatible()
                 && mActivityType != ACTIVITY_TYPE_ARCHIVE ?
@@ -501,6 +513,7 @@ public class CallLogAdapter extends GroupingListAdapter
         final PhoneAccountHandle accountHandle = PhoneAccountUtils.getAccount(
                 c.getString(CallLogQuery.ACCOUNT_COMPONENT_NAME),
                 c.getString(CallLogQuery.ACCOUNT_ID));
+        final Drawable accountIcon = mCallLogCache.getAccountIcon(accountHandle);
         final ContactInfo cachedContactInfo = ContactInfoHelper.getContactInfo(c);
         final boolean isVoicemailNumber =
                 mCallLogCache.isVoicemailNumber(accountHandle, number);
@@ -522,6 +535,7 @@ public class CallLogAdapter extends GroupingListAdapter
                 postDialDigits, isVoicemailNumber);
         details.viaNumber = viaNumber;
         details.accountHandle = accountHandle;
+        details.accountIcon = accountIcon;
         details.countryIso = countryIso;
         details.date = c.getLong(CallLogQuery.DATE);
         details.duration = c.getLong(CallLogQuery.DURATION);
@@ -592,7 +606,7 @@ public class CallLogAdapter extends GroupingListAdapter
             views.voicemailUri = c.getString(CallLogQuery.VOICEMAIL_URI);
         }
 
-        mCallLogListItemHelper.setPhoneCallDetails(views, details);
+        mCallLogListItemHelper.setPhoneCallDetails(views, details, mFilterString);
 
         if (mCurrentlyExpandedRowId == views.rowId) {
             // In case ViewHolders were added/removed, update the expanded position if the rowIds
@@ -604,7 +618,7 @@ public class CallLogAdapter extends GroupingListAdapter
         }
         views.updatePhoto();
 
-        mCallLogListItemHelper.setPhoneCallDetails(views, details);
+        mCallLogListItemHelper.setPhoneCallDetails(views, details, mFilterString);
     }
 
     private String getPreferredDisplayName(ContactInfo contactInfo) {
@@ -914,5 +928,9 @@ public class CallLogAdapter extends GroupingListAdapter
 
         PromoCardViewHolder viewHolder = PromoCardViewHolder.create(view);
         return viewHolder;
+    }
+
+    public void setQueryString(String filter) {
+        mFilterString = filter;
     }
 }
